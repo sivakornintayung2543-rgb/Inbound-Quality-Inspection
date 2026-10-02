@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Inbound Quality Inspection</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1c2430;--mu:#6b7686;--bd:#dde1e7;--ac:#1f6feb;--ok:#1a7f4b;--okb:#e3f5ea;--no:#c62828;--nob:#fde8e8;--wa:#a05a00;--wab:#fff1d6;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12161c;--card:#1b212a;--tx:#e8ecf1;--mu:#93a0b2;--bd:#2c3542;--ac:#5b9bff;--ok:#5fd39a;--okb:#16352a;--no:#ff8a80;--nob:#3b1d1d;--wa:#ffc266;--wab:#3b2e12}}
+:root[data-theme="dark"]{--bg:#12161c;--card:#1b212a;--tx:#e8ecf1;--mu:#93a0b2;--bd:#2c3542;--ac:#5b9bff;--ok:#5fd39a;--okb:#16352a;--no:#ff8a80;--nob:#3b1d1d;--wa:#ffc266;--wab:#3b2e12}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{background:var(--card);border-bottom:1px solid var(--bd);padding:12px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
+h1{font-size:17px;margin:0}h2{font-size:15px;margin:0 0 10px}
+.seg{display:inline-flex;border:1px solid var(--bd);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:none;color:var(--tx);padding:7px 12px;cursor:pointer;font:inherit}
+.seg button.on{background:var(--ac);color:#fff}
+main{max-width:1100px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;margin-bottom:14px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px}.kpi b{display:block;font-size:24px}.kpi span{color:var(--mu);font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+label{display:block;font-size:12px;color:var(--mu);margin-bottom:3px}
+input,select,textarea{width:100%;padding:8px;border:1px solid var(--bd);border-radius:7px;background:var(--bg);color:var(--tx);font:inherit}
+textarea{min-height:60px}
+button.p,button.s{padding:8px 14px;border-radius:8px;border:1px solid var(--ac);cursor:pointer;font:inherit}
+button.p{background:var(--ac);color:#fff}button.s{background:none;color:var(--ac)}
+.chk{display:grid;grid-template-columns:1fr 110px;gap:6px 10px;align-items:center}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:8px;border-bottom:1px solid var(--bd);white-space:nowrap}th{color:var(--mu);font-weight:600;font-size:12px}
+tr.r{cursor:pointer}tr.r:hover{background:var(--bg)}
+.tag{display:inline-block;padding:2px 8px;border-radius:99px;font-size:12px;font-weight:600}
+.Accept{background:var(--okb);color:var(--ok)}.Reject{background:var(--nob);color:var(--no)}.Hold,.Conditional{background:var(--wab);color:var(--wa)}
+.hint{padding:8px 10px;border-radius:8px;margin:10px 0;font-size:13px;background:var(--wab);color:var(--wa)}
+.bar{height:8px;border-radius:4px;background:var(--nob);min-width:70px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ok)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.row input,.row select{width:auto;flex:1;min-width:140px}
+.mu{color:var(--mu);font-size:12.5px}.hide{display:none}
+#panel{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10;overflow:auto;padding:16px}
+#panel .card{max-width:760px;margin:20px auto}
+.err{color:var(--no);font-size:13px;margin-top:8px}
+</style></head>
+<body>
+<header>
+<h1>📦 Inbound Quality Inspection</h1>
+<div style="display:flex;gap:10px;flex-wrap:wrap">
+<div class="seg" id="role"><button data-r="Warehouse" class="on">Warehouse</button><button data-r="Purchasing">Purchasing</button></div>
+<div class="seg" id="tabs"><button data-t="dash" class="on">Dashboard</button><button data-t="new">New inspection</button><button data-t="log">Records</button><button data-t="ev">Vendor evaluation</button></div>
+</div></header>
+<main>
+<section id="dash"></section>
+<section id="new" class="hide"></section>
+<section id="log" class="hide"></section>
+<section id="ev" class="hide"></section>
+<div class="mu" id="store" style="margin-top:8px"></div>
+</main>
+<div id="panel" class="hide"></div>
+<script>
+const CK=["Packaging condition","Labels & identification","Quantity vs PO / delivery note","Documents (COA / CoC / packing list)","Visual appearance","Dimensions / specification","Function / test","Temperature & storage condition"];
+const STAT=["Open","Supplier notified","Awaiting return / replacement","Closed"];
+const ACT=["","Return to supplier","Replacement","Credit note","Use as-is (concession)","Rework / sort","Scrap"];
+let recs=[],role="Warehouse",tab="dash",col=null,csvOK=null,evs=[],ecol=null;
+const $=s=>document.querySelector(s);
+const E=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const today=()=>new Date().toISOString().slice(0,10);
+const opts=(a,v)=>a.map(x=>`<option ${x===v?"selected":""}>${E(x)}</option>`).join("");
+
+/* storage: shared db when available, else this browser only */
+async function init(){
+ try{if(typeof claude!=="undefined"){const db=await claude.use("db");if(db){col=db.collection("inspections");ecol=db.collection("evaluations");ecol.onSnapshot(s=>{evs=s.docs.map(d=>({...d.data(),id:d.id}));draw();},()=>{});
+  col.onSnapshot(s=>{recs=s.docs.map(d=>({...d.data(),id:d.id}));draw();},()=>{});}}}catch(e){}
+ try{if(typeof claude!=="undefined")csvOK=await claude.use("downloads");}catch(e){}
+ if(!col){try{recs=JSON.parse(localStorage.getItem("inb_recs")||"[]")}catch(e){recs=[]}try{evs=JSON.parse(localStorage.getItem("inb_evs")||"[]")}catch(e){evs=[]}}
+ $("#store").textContent=col?"Records are shared with everyone who has access to this page.":"Records are saved in this browser only (sign in to claude.ai to share them).";
+ draw();
+}
+async function save(r){
+ if(col){try{await col.doc(r.id).set(r)}catch(e){alert("Could not save: "+(e.message||e.code))}}
+ else{const i=recs.findIndex(x=>x.id===r.id);i<0?recs.unshift(r):recs[i]=r;try{localStorage.setItem("inb_recs",JSON.stringify(recs))}catch(e){}draw();}
+}
+
+/* navigation */
+$("#tabs").onclick=e=>{const t=e.target.dataset.t;if(t){tab=t;draw()}};
+$("#role").onclick=e=>{const r=e.target.dataset.r;if(r){role=r;if(r==="Purchasing"&&tab==="new")tab="log";draw()}};
+function draw(){
+ document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));
+ document.querySelectorAll("#role button").forEach(b=>b.classList.toggle("on",b.dataset.r===role));
+ ["dash","new","log","ev"].forEach(s=>$("#"+s).classList.toggle("hide",s!==tab));
+ $("#tabs [data-t=new]").style.display=role==="Warehouse"?"":"none";
+ if(tab==="dash")dash();else if(tab==="log")log();else if(tab==="ev")ev();else if(!$("#new").innerHTML)form();
+}
+
+/* dashboard */
+const open=r=>r.decision!=="Accept"&&r.status!=="Closed";
+function dash(){
+ const n=recs.length,acc=recs.filter(r=>r.decision==="Accept").length,op=recs.filter(open).length;
+ const qr=recs.reduce((a,r)=>a+(+r.qtyRecv||0),0),qj=recs.reduce((a,r)=>a+(+r.qtyRej||0),0);
+ const sup={};recs.forEach(r=>{const s=sup[r.supplier]??={n:0,a:0,rej:0,d:0};s.n++;if(r.decision==="Accept")s.a++;if(r.decision==="Reject")s.rej++;s.d+=(+r.crit||0)+(+r.major||0)+(+r.minor||0)});
+ const rows=Object.entries(sup).sort((a,b)=>b[1].n-a[1].n).map(([k,s])=>`<tr><td>${E(k)}</td><td>${s.n}</td><td><div class="bar"><i style="width:${Math.round(s.a/s.n*100)}%"></i></div></td><td>${Math.round(s.a/s.n*100)}%</td><td>${s.rej}</td><td>${s.d}</td></tr>`).join("");
+ const todo=recs.filter(open).slice(0,6).map(r=>`<tr class="r" data-id="${r.id}"><td>${E(r.ncr)}</td><td>${E(r.supplier)}</td><td>${E(r.partNo)}</td><td><span class="tag ${r.decision}">${r.decision}</span></td><td>${E(r.status)}</td></tr>`).join("");
+ $("#dash").innerHTML=`<div class="kpis">
+ <div class="kpi"><b>${n}</b><span>Inspections</span></div>
+ <div class="kpi"><b>${n?Math.round(acc/n*100):0}%</b><span>Lots accepted first time</span></div>
+ <div class="kpi"><b>${qr?(qj/qr*100).toFixed(1):0}%</b><span>Qty rejected / held</span></div>
+ <div class="kpi"><b>${op}</b><span>Open NCRs</span></div></div>
+ <div class="card"><h2>Open non-conformances</h2><div class="tw"><table><tr><th>NCR</th><th>Supplier</th><th>Part</th><th>Decision</th><th>Follow-up</th></tr>${todo||'<tr><td colspan=5 class="mu">None open.</td></tr>'}</table></div></div>
+ <div class="card"><h2>Supplier performance</h2><div class="tw"><table><tr><th>Supplier</th><th>Lots</th><th></th><th>Accepted</th><th>Rejected lots</th><th>Defects</th></tr>${rows||'<tr><td colspan=6 class="mu">No data yet.</td></tr>'}</table></div></div>`;
+}
+
+/* new inspection form (warehouse) */
+function form(){
+ $("#new").innerHTML=`<form class="card" id="f" onsubmit="return false">
+ <h2>Receiving details</h2><div class="grid">
+ <div><label>PO number *</label><input id="po"></div><div><label>Supplier *</label><input id="sup" list="sl"><datalist id="sl"></datalist></div>
+ <div><label>Part / item no. *</label><input id="pn"></div><div><label>Description</label><input id="ds"></div>
+ <div><label>Lot / batch no.</label><input id="lot"></div><div><label>Delivery note no.</label><input id="dn"></div>
+ <div><label>Date received</label><input id="dt" type="date" value="${today()}"></div><div><label>Inspector *</label><input id="insp"></div>
+ <div><label>Qty ordered</label><input id="qpo" type="number" min="0"></div><div><label>Qty received *</label><input id="qr" type="number" min="0"></div>
+ <div><label>Unit</label><select id="uom">${opts(["pcs","kg","m","box","pallet","L"])}</select></div></div>
+ <h2 style="margin-top:18px">Inspection checklist</h2><div class="chk">${CK.map((c,i)=>`<span>${c}</span><select class="ck" data-i="${i}">${opts(["Pass","Fail","N/A"])}</select>`).join("")}</div>
+ <h2 style="margin-top:18px">Sampling &amp; defects</h2><div class="grid">
+ <div><label>Sample size</label><input id="ss" type="number" min="0"></div><div><label>Critical defects</label><input id="cr" type="number" min="0" value="0"></div>
+ <div><label>Major defects</label><input id="ma" type="number" min="0" value="0"></div><div><label>Minor defects</label><input id="mi" type="number" min="0" value="0"></div></div>
+ <div class="hint" id="sg"></div>
+ <h2>Disposition</h2><div class="grid">
+ <div><label>Decision</label><select id="dc">${opts(["Accept","Conditional","Hold","Reject"])}</select></div>
+ <div><label>Qty rejected / held</label><input id="qj" type="number" min="0" value="0"></div></div>
+ <div style="margin-top:10px"><label>Defect description / remarks (required unless accepted)</label><textarea id="nt"></textarea></div>
+ <div class="err" id="er"></div>
+ <div class="row" style="margin-top:12px"><button class="p" id="sv">Save inspection</button><button class="s" id="rs">Clear</button></div></form>`;
+ const f=$("#f");f.oninput=sugg;sugg();
+ $("#sl").innerHTML=[...new Set(recs.map(r=>r.supplier))].map(s=>`<option value="${E(s)}">`).join("");
+ $("#rs").onclick=()=>{$("#new").innerHTML="";form()};
+ $("#sv").onclick=submit;
+}
+function sugg(){
+ const f=[...document.querySelectorAll(".ck")].filter(s=>s.value==="Fail").length,c=+$("#cr").value||0,m=+$("#ma").value||0;
+ $("#sg").textContent=c>0?"Suggested: Reject — critical defect recorded.":(f||m)?`Suggested: Hold or Conditional — ${f} failed check(s), ${m} major defect(s). Review with Purchasing.`:"No failures recorded — Accept is suggested.";
+}
+async function submit(){
+ const v=i=>$("#"+i).value.trim(),qr=+v("qr"),qj=+v("qj"),dc=v("dc"),er=$("#er");
+ if(!v("po")||!v("sup")||!v("pn")||!v("insp")||!qr)return er.textContent="Please fill PO, supplier, part no., inspector and qty received.";
+ if(qj>qr)return er.textContent="Rejected qty cannot exceed qty received.";
+ if(dc!=="Accept"&&!v("nt"))return er.textContent="Add remarks describing the problem.";
+ if(dc==="Reject"&&!qj)return er.textContent="Enter the rejected quantity.";
+ const d=v("dt").replace(/-/g,"").slice(2),k=recs.length+1,pad=String(k).padStart(3,"0");
+ const r={id:"r"+Date.now(),no:`INS-${d}-${pad}`,ncr:dc==="Accept"?"—":`NCR-${d}-${pad}`,po:v("po"),supplier:v("sup"),partNo:v("pn"),desc:v("ds"),lot:v("lot"),dn:v("dn"),date:v("dt"),inspector:v("insp"),qtyPo:v("qpo"),qtyRecv:qr,uom:v("uom"),
+ checks:[...document.querySelectorAll(".ck")].map(s=>s.value),sample:v("ss"),crit:+v("cr")||0,major:+v("ma")||0,minor:+v("mi")||0,decision:dc,qtyRej:qj,notes:v("nt"),
+ status:dc==="Accept"?"Closed":"Open",action:"",ref:"",pnotes:""};
+ await save(r);er.textContent="";$("#new").innerHTML="";tab="log";draw();
+}
+
+/* records */
+let q="",fd="";
+function log(){
+ const el=$("#log");
+ if(!el.dataset.b){el.dataset.b=1;el.innerHTML=`<div class="row"><input id="q" placeholder="Search PO, supplier, part, lot…"><select id="fd"><option value="">All decisions</option>${["Accept","Conditional","Hold","Reject"].map(x=>`<option>${x}</option>`).join("")}<option value="open">Open follow-ups</option></select>${"<button class='s' id='ex'>Export CSV</button>"}</div><div class="card"><div class="tw" id="lt"></div></div>`;
+  $("#q").oninput=e=>{q=e.target.value.toLowerCase();lt()};$("#fd").onchange=e=>{fd=e.target.value;lt()};$("#ex").onclick=exp;}
+ lt();
+}
+function lt(){
+ const L=recs.filter(r=>(!q||[r.po,r.supplier,r.partNo,r.lot,r.no,r.ncr].join(" ").toLowerCase().includes(q))&&(!fd||(fd==="open"?open(r):r.decision===fd)));
+ $("#lt").innerHTML=`<table><tr><th>Inspection</th><th>Date</th><th>PO</th><th>Supplier</th><th>Part</th><th>Qty</th><th>Decision</th><th>Follow-up</th></tr>${L.map(r=>`<tr class="r" data-id="${r.id}"><td>${E(r.no)}</td><td>${E(r.date)}</td><td>${E(r.po)}</td><td>${E(r.supplier)}</td><td>${E(r.partNo)}</td><td>${r.qtyRecv} ${E(r.uom)}</td><td><span class="tag ${r.decision}">${r.decision}</span></td><td>${r.decision==="Accept"?"":E(r.status)}</td></tr>`).join("")||'<tr><td colspan=8 class="mu">No records.</td></tr>'}</table>`;
+}
+document.addEventListener("click",e=>{const t=e.target.closest("tr.r");if(t)detail(t.dataset.id)});
+async function exp(){
+ const h=["no","ncr","date","po","supplier","partNo","desc","lot","dn","qtyPo","qtyRecv","uom","sample","crit","major","minor","decision","qtyRej","notes","inspector","status","action","ref","pnotes"];
+ const c=s=>`"${String(s??"").replace(/"/g,'""')}"`;
+ const data=[h.join(","),...recs.map(r=>h.map(k=>c(r[k])).join(","))].join("\n");
+ if(!csvOK)return alert("Download is not available in this view.");
+ try{await csvOK.save({filename:"inbound-inspections.csv",data})}catch(e){}
+}
+
+/* detail + purchasing follow-up */
+function detail(id){
+ const r=recs.find(x=>x.id===id);if(!r)return;
+ const P=role==="Purchasing"&&r.decision!=="Accept",dis=P?"":"disabled";
+ const fails=(r.checks||[]).map((c,i)=>c==="Fail"?CK[i]:null).filter(Boolean);
+ $("#panel").classList.remove("hide");
+ $("#panel").innerHTML=`<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${E(r.no)} <span class="tag ${r.decision}">${r.decision}</span></h2><button class="s" id="x">Close</button></div>
+ <div class="grid mu" style="color:var(--tx)">
+ <div><label>PO / Delivery note</label>${E(r.po)} / ${E(r.dn)||"—"}</div><div><label>Supplier</label>${E(r.supplier)}</div>
+ <div><label>Part</label>${E(r.partNo)} ${E(r.desc)}</div><div><label>Lot</label>${E(r.lot)||"—"}</div>
+ <div><label>Received</label>${r.qtyRecv} ${E(r.uom)} (ordered ${E(r.qtyPo)||"—"}) on ${E(r.date)}</div><div><label>Inspector</label>${E(r.inspector)}</div>
+ <div><label>Sample / defects (crit·major·minor)</label>${E(r.sample)||"—"} / ${r.crit}·${r.major}·${r.minor}</div><div><label>Qty rejected / held</label>${r.qtyRej}</div>
+ <div><label>Failed checks</label>${fails.length?fails.map(E).join(", "):"None"}</div><div><label>NCR</label>${E(r.ncr)}</div></div>
+ ${r.notes?`<p><label>Warehouse remarks</label>${E(r.notes)}</p>`:""}
+ ${r.decision==="Accept"?"":`<h2 style="margin-top:16px">Purchasing follow-up ${P?"":'<span class="mu">(switch to Purchasing role to edit)</span>'}</h2><div class="grid">
+ <div><label>Status</label><select id="ps" ${dis}>${opts(STAT,r.status)}</select></div><div><label>Action</label><select id="pa" ${dis}>${opts(ACT,r.action)}</select></div>
+ <div><label>RMA / credit note / ref</label><input id="pr" value="${E(r.ref)}" ${dis}></div></div>
+ <div style="margin-top:10px"><label>Notes (supplier contact, agreement…)</label><textarea id="pt" ${dis}>${E(r.pnotes)}</textarea></div>
+ ${P?'<div class="row" style="margin-top:10px"><button class="p" id="pv">Save follow-up</button></div>':""}`}</div>`;
+ $("#x").onclick=()=>$("#panel").classList.add("hide");
+ if($("#pv"))$("#pv").onclick=async()=>{await save({...r,status:$("#ps").value,action:$("#pa").value,ref:$("#pr").value.trim(),pnotes:$("#pt").value.trim()});$("#panel").classList.add("hide")};
+}
+/* annual vendor evaluation: Quality avg x14 (max 70) + Delivery&Service avg x6 (max 30) */
+const QC=["คุณภาพของสินค้า/บริการ (Product / service quality)","ความครบถ้วนและถูกต้องของเอกสาร เช่น COA, COC (Documents)","สภาพของบรรจุภัณฑ์ (Packaging condition)","การดูแลรักษาเครื่องมืออุปกรณ์ (Equipment care)"];
+const DC=["ความตรงต่อเวลาในการส่งมอบ (On-time delivery)","ประสิทธิภาพการบริหารจัดการ (Management efficiency)","การสื่อสาร (Communication)","การประสานงานร่วมกับหน่วยงาน (Coordination)"];
+const GR={A:{n:"Excellent",c:"Accept",m:["ต่อสัญญาอัตโนมัติ","ลดความถี่ในการตรวจประเมิน (Audit)"]},
+B:{n:"Acceptable",c:"Hold",m:["เจ้าหน้าที่จัดซื้อจัดประชุมร่วมกับผู้ขาย/ผู้รับจ้าง เพื่อแจ้งข้อบกพร่องและจุดที่ต้องปรับปรุง","เจ้าหน้าที่จัดซื้อติดตามผลการดำเนินงานในหัวข้อที่ได้รับคะแนนน้อยเป็นพิเศษ"]},
+C:{n:"At Risk",c:"Reject",m:["ผู้จัดการฝ่ายบริหารงานทั่วไปออกเอกสารข้อร้องเรียนเพื่อแจ้งข้อบกพร่อง เพื่อให้ผู้ขายฯ ส่งแผนแก้ไขและป้องกัน (CAPA) ภายใน 15-30 วัน","ระงับการสั่งซื้อชั่วคราวหรือจำกัดปริมาณการสั่งซื้อ (จนกว่าจะได้รับแผนแก้ไขและป้องกันที่ผ่านการอนุมัติ)","พิจารณาดำเนินการ Supplier Audit"]}};
+const grade=t=>t>=80?"A":t>=60?"B":"C";
+let eid=null,ey="";
+const avg=a=>{a=a.filter(x=>x>0);return a.length?a.reduce((s,x)=>s+x,0)/a.length:0};
+const sc=r=>{const q=avg(r.q)*14,d=avg(r.d)*6;return{q,d,t:q+d}};
+const f2=n=>(Math.round(n*100)/100).toFixed(2);
+function ev(){
+ if(!$("#ev").innerHTML)$("#ev").innerHTML='<div id="evf"></div><div id="evl"></div>';
+ if(!$("#evf").innerHTML)evForm();
+ evList();
+}
+function evForm(r){
+ r=r||{year:new Date().getFullYear(),q:[],d:[]};eid=r.id||null;
+ const S=(c,o,v)=>`<select class="${c}"><option value="">–</option>${o.map(x=>`<option value="${x}"${v===x?" selected":""}>${x===0?"N/A":x}</option>`).join("")}</select>`;
+ $("#evf").innerHTML=`<div class="card" id="ef">
+ <h2>ประเมินผลการดำเนินงานผู้ขาย/ผู้รับจ้างประจำปี <span class="mu">Annual vendor evaluation</span></h2>
+ <div class="grid">
+ <div><label>ผู้ขาย / ผู้รับจ้าง *</label><input id="evs" list="esl" value="${E(r.supplier)}"><datalist id="esl">${[...new Set([...recs,...evs].map(x=>x.supplier))].map(s=>`<option value="${E(s)}">`).join("")}</datalist></div>
+ <div><label>ปีที่ประเมิน (ค.ศ.) *</label><input id="evy" type="number" value="${r.year}"></div>
+ <div><label>ประเภท</label><select id="evt">${opts(["สินค้า","บริการ","ผู้รับจ้าง"],r.type)}</select></div>
+ <div><label>ผู้ประเมิน *</label><input id="eve" value="${E(r.evaluator)}"></div></div>
+ <div class="hint" id="erf" style="background:var(--bg);color:var(--mu)"></div>
+ <h2>1. ด้านคุณภาพ (Quality) — 70% <span class="mu">ให้คะแนน 1–5 → ค่าเฉลี่ย × 14</span></h2>
+ <div class="chk">${QC.map((c,i)=>`<span>${c}</span>${S("eq",[1,2,3,4,5],r.q[i])}`).join("")}</div>
+ <h2 style="margin-top:18px">2. ด้านการส่งมอบและการให้บริการ (Delivery &amp; Service) — 30% <span class="mu">ให้คะแนน 1, 3, 5 → ค่าเฉลี่ย × 6</span></h2>
+ <div class="chk">${DC.map((c,i)=>`<span>${c}</span>${S("ed",[1,3,5],r.d[i])}`).join("")}</div>
+ <div class="kpis" style="margin-top:16px"><div class="kpi"><b id="sq">0</b><span>Quality (เต็ม 70)</span></div><div class="kpi"><b id="sd">0</b><span>Delivery &amp; Service (เต็ม 30)</span></div><div class="kpi"><b id="st" style="color:var(--ac)">0</b><span>คะแนนรวม Total (เต็ม 100)</span></div></div><div class="card" id="gb" style="background:var(--bg)"></div>
+ <label>หมายเหตุ</label><textarea id="evn">${E(r.notes)}</textarea>
+ <div class="err" id="eer"></div>
+ <div class="row" style="margin-top:12px"><button class="p" id="esv">บันทึกผลการประเมิน</button><button class="s" id="ers">ล้างฟอร์ม</button></div>
+ <div class="mu">ต้องให้คะแนนครบทุกหัวข้อ ทุกประเภท (ไม่มี N/A) · บันทึกซ้ำผู้ขายและปีเดิมจะเป็นการอัปเดตผลเดิม</div></div>`;
+ $("#ef").oninput=evCalc;evCalc();
+ $("#esv").onclick=evSave;$("#ers").onclick=()=>evForm();
+}
+function evCalc(){
+ const Q=[...document.querySelectorAll(".eq")],D=[...document.querySelectorAll(".ed")];
+ const g=a=>a.map(x=>x.value===""?0:+x.value),s=sc({q:g(Q),d:g(D)}),t=+f2(s.t),ok=![...Q,...D].some(x=>x.value==="");
+ $("#sq").textContent=f2(s.q);$("#sd").textContent=f2(s.d);$("#st").textContent=f2(s.t);
+ const G=GR[grade(t)];
+ $("#gb").innerHTML=ok?`<h2>เกรด ${grade(t)} <span class="tag ${G.c}">${G.n}</span></h2><label>มาตรการที่ดำเนินการ (ปีที่ 1)</label><ul style="margin:4px 0 0;padding-left:20px">${G.m.map(x=>`<li>${x}</li>`).join("")}</ul>`:'<span class="mu">ให้คะแนนครบทุกหัวข้อเพื่อดูเกรดและมาตรการ</span>';
+ const sp=$("#evs").value.trim().toLowerCase(),y=$("#evy").value,L=recs.filter(r=>(r.supplier||"").toLowerCase()===sp&&(r.date||"").startsWith(y));
+ const n=L.length,pc=k=>L.filter(r=>(r.checks||[])[k]==="Fail").length;
+ $("#erf").textContent=!sp?"ข้อมูลอ้างอิงจากการตรวจรับสินค้า: เลือกผู้ขายเพื่อดู":!n?`ไม่พบข้อมูลการตรวจรับของ ${$("#evs").value} ในปี ${y}`:`ข้อมูลอ้างอิงจากการตรวจรับปี ${y}: ${n} ล็อต · ผ่านทันที ${Math.round(L.filter(r=>r.decision==="Accept").length/n*100)}% · ปฏิเสธ ${L.filter(r=>r.decision==="Reject").length} ล็อต · เอกสารไม่ผ่าน ${pc(3)} ครั้ง · บรรจุภัณฑ์ไม่ผ่าน ${pc(0)} ครั้ง`;
+}
+async function evSave(){
+ const v=i=>$("#"+i).value.trim(),er=$("#eer"),g=c=>[...document.querySelectorAll(c)].map(s=>s.value===""?null:+s.value);
+ const q=g(".eq"),d=g(".ed");
+ if(!v("evs")||!v("evy")||!v("eve"))return er.textContent="กรุณากรอก ผู้ขาย/ผู้รับจ้าง ปี และผู้ประเมิน";
+ if(q.includes(null)||d.includes(null))return er.textContent="กรุณาให้คะแนนครบทุกหัวข้อ";
+ const ex=evs.find(x=>x.supplier.toLowerCase()===v("evs").toLowerCase()&&x.year===+v("evy")),s=sc({q,d});
+ const r={id:eid||ex?.id||"e"+Date.now(),supplier:v("evs"),year:+v("evy"),type:v("evt"),evaluator:v("eve"),q,d,sq:+f2(s.q),sd:+f2(s.d),t:+f2(s.t),g:grade(+f2(s.t)),notes:v("evn")};
+ if(ecol){try{await ecol.doc(r.id).set(r)}catch(e){return er.textContent="บันทึกไม่ได้: "+(e.message||e.code)}}
+ else{const i=evs.findIndex(x=>x.id===r.id);i<0?evs.unshift(r):evs[i]=r;try{localStorage.setItem("inb_evs",JSON.stringify(evs))}catch(e){}}
+ evForm();evList();
+}
+function evList(){
+ const ys=[...new Set(evs.map(x=>x.year))].sort((a,b)=>b-a),L=evs.filter(x=>!ey||x.year==ey).sort((a,b)=>b.year-a.year||b.t-a.t);
+ $("#evl").innerHTML=`<div class="row"><select id="ey"><option value="">ทุกปี</option>${ys.map(y=>`<option value="${y}"${y==ey?" selected":""}>${y} (พ.ศ. ${y+543})</option>`).join("")}</select><button class="s" id="eex">Export CSV</button></div>
+ <div class="card"><h2>ผลการประเมินที่บันทึกไว้</h2><div class="tw"><table><tr><th>ปี</th><th>ผู้ขาย/ผู้รับจ้าง</th><th>ประเภท</th><th>Quality /70</th><th>Delivery &amp; Service /30</th><th>รวม /100</th><th>เกรด</th><th>ผู้ประเมิน</th></tr>${L.map(x=>`<tr class="re" data-id="${x.id}" style="cursor:pointer"><td>${x.year} (พ.ศ. ${x.year+543})</td><td>${E(x.supplier)}</td><td>${E(x.type)}</td><td>${f2(x.sq)}</td><td>${f2(x.sd)}</td><td><b>${f2(x.t)}</b></td><td><span class="tag ${GR[grade(x.t)].c}">${grade(x.t)} · ${GR[grade(x.t)].n}</span></td><td>${E(x.evaluator)}</td></tr>`).join("")||'<tr><td colspan=8 class="mu">ยังไม่มีผลการประเมิน</td></tr>'}</table></div><div class="mu">คลิกที่แถวเพื่อเปิดแก้ไข</div></div>`;
+ $("#ey").onchange=e=>{ey=e.target.value;evList()};$("#eex").onclick=expE;
+}
+document.addEventListener("click",e=>{const t=e.target.closest("tr.re");if(t){const r=evs.find(x=>x.id===t.dataset.id);if(r){evForm(r);scrollTo(0,0)}}});
+async function expE(){
+ const h=["year","supplier","type","evaluator","q1","q2","q3","q4","d1","d2","d3","d4","sq","sd","t","grade","notes"],c=s=>`"${String(s??"").replace(/"/g,'""')}"`;
+ const data="\ufeff"+[h.join(","),...evs.map(r=>[r.year,r.supplier,r.type,r.evaluator,...r.q,...r.d,r.sq,r.sd,r.t,grade(r.t),r.notes].map(c).join(","))].join("\n");
+ if(!csvOK)return alert("Download is not available in this view.");
+ try{await csvOK.save({filename:"vendor-evaluations.csv",data})}catch(e){}
+}
+
+init();
+</script></body></html>
